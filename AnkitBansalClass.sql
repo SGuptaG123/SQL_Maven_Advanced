@@ -583,12 +583,566 @@ create table users13 (
 
 Select * from users13
 Select * from items13
-Select * from orders13
+Select * from orders13;
+
+with rnk_order as (
+							Select *,
+										ROW_NUmber() over (Partition by seller_id order by order_date) as rnk
+							from orders13
+							),
+		second_fav_order as (Select ro.*, i.item_brand
+												from rnk_order as ro
+												left join items13 as i on (i.item_id = ro.item_id)
+												where rnk = 2)
+
+Select u.user_id, u.favorite_brand as first_favorite, sfo.item_brand as second_bought_brand,
+			case when u.favorite_brand=sfo.item_brand then 'Yes' else 'No' end as favorite_Brand
+from users13 u
+left join second_fav_order sfo
+		on (u.user_id = sfo.seller_id)
+
+--10-Jan-2026---11---------------------Day 14 - ----------------------------
+--User Purchase Platform
+-- The table logs the spending history of the users that make purchases from online shopping website via desktop and mobile app
+-- Write a SQL query to find the total number of users and the total amount spent using mobile only, desktop only and both mobile and desktop together for each date
+
+create table spending 
+				(
+				user_id int,
+				spend_date date,
+				platform varchar(10),
+				amount int
+				);
+
+insert into spending values(1,'2019-07-01','mobile',100),(1,'2019-07-01','desktop',100),(2,'2019-07-01','mobile',100)
+,(2,'2019-07-02','mobile',100),(3,'2019-07-01','desktop',100),(3,'2019-07-02','desktop',100);
+
+Select * from spending;
+
+With spending_order as (
+							Select spend_date, max(platform) as platform, sum(amount) as total_amount, count(distinct user_id) as total_user
+							from spending 
+							Group by spend_date, user_id
+							having(count(platform)) =1
+							
+							Union All
+							
+							Select spend_date, 'Both' as platform, sum(amount) as total_amount, count(distinct user_id) as total_user
+							from spending 
+							Group by spend_date, user_id
+							having(count(platform)) =2
+							
+							Union All
+							
+							Select Distinct(spend_date), 'Both' as platform , Null as total_amount, Null as total_user
+							from spending 
+							)
+
+Select spend_date, platform, sum(total_amount) as total_amount, Sum(total_user) as total_user
+from spending_order
+group by spend_date, platform
+order by spend_date, platform desc
+
+---------------------------------Another Solution------------------------------------------------------------
+Select spend_date,
+			case when count(distinct platform)=1 then max(platform) else 'both' end as platform,
+			sum(amount) as total_amount,
+			count(distinct user_id) as total_user
+from spending
+group by spend_date, user_id;
+
+
+WITH spending_order AS (
+										SELECT spend_date,
+														CASE WHEN COUNT(DISTINCT platform) = 1 THEN MAX(platform) ELSE 'both' END AS platform,
+														SUM(amount) AS total_amount,
+														COUNT(DISTINCT user_id) AS total_users
+										FROM spending
+										GROUP BY spend_date, user_id
+
+										Union All
+
+										Select Distinct(spend_date), 'both' as platform , 0 as total_amount, 0 as total_users
+										from spending 
+									)
+
+SELECT spend_date, platform,
+			   SUM(total_amount) AS total_amount,
+			   SUM(total_users) AS total_users
+FROM spending_order
+GROUP BY spend_date, platform
+ORDER BY spend_date, platform DESC;
 
 
 
+--10-Jan-2026---11---------------------Day 15- ----------------------------
+--calcuate year wise sale for product ids,
+
+with recursiveCTE as (
+			select 1 as num
+
+			union all
+
+			Select num+1 as num
+			from recursiveCTE
+			where num <6)
+
+select * from recursiveCTE
+
+create table sales ( product_id int, period_start date, period_end date, average_daily_sales int ); 
+insert into sales values(1,'2019-01-25','2019-02-28',100),(2,'2018-12-01','2020-01-01',10),(3,'2019-12-01','2020-01-31',1);
+
+Select * from sales
+
+Select min(period_start), max(period_start)  from sales
+Select min(period_end), max(period_end)  from sales;
 
 
+Select * from sales;
+
+WITH dateLimts as (
+							Select min(period_start) as stDate, max(period_end) as enDate  from sales),
+
+			recursiveDateCTE AS (
+							  SELECT  stDate as dt FROM dateLimts
+
+							  UNION ALL
+
+							  SELECT DATEADD(DAY, 1, dt) AS dt
+							  FROM recursiveDateCTE
+							  WHERE DATEADD(DAY, 1, dt) <= (SELECT  enDate as dt FROM dateLimts)
+							),
+			yearCTE as (
+						SELECT DatePart(year, rdc.dt) as report_year, s.product_id, SUM(s.average_daily_sales) as total_amount
+						FROM recursiveDateCTE as rdc
+						inner Join sales s on (rdc.dt >= cast(s.period_start as date)  AND rdc.dt <=cast(s.period_end as date))
+						Group by DatePart(year, rdc.dt), s.product_id
+						)
+
+Select product_id, report_year, total_amount from yearCTE
+order by product_id
+OPTION (MAXRECURSION 0)
+
+
+
+--11-Jan-2026---12---------------------Day 16- ----------------------------
+--Prime Subscription rate by product action
+--Given the following two tables, return the fraction of users, rounded to two decimal places,
+--who accessed amozon music and upgraded to prime membership within the first 30 days of signing up
+
+create table users16
+							(
+							user_id integer,
+							name varchar(20),
+							join_date date
+							);
+insert into users16
+values (1, 'Jon', CAST('2-14-20' AS date)), 
+(2, 'Jane', CAST('2-14-20' AS date)), 
+(3, 'Jill', CAST('2-15-20' AS date)), 
+(4, 'Josh', CAST('2-15-20' AS date)), 
+(5, 'Jean', CAST('2-16-20' AS date)), 
+(6, 'Justin', CAST('2-17-20' AS date)),
+(7, 'Jeremy', CAST('2-18-20' AS date));
+
+create table events16
+(
+user_id integer,
+type varchar(10),
+access_date date
+);
+
+insert into events16 values
+(1, 'Pay', CAST('3-1-20' AS date)), 
+(2, 'Music', CAST('3-2-20' AS date)), 
+(2, 'P', CAST('3-12-20' AS date)),
+(3, 'Music', CAST('3-15-20' AS date)), 
+(4, 'Music', CAST('3-15-20' AS date)), 
+(1, 'P', CAST('3-16-20' AS date)), 
+(3, 'P', CAST('3-22-20' AS date));
+
+Select * from users16
+Select * from events16;
+
+ 
+with event_details as (
+								Select e.user_id, e.type,  u.join_date, e.access_date,
+											DATEDIFF(day, u.join_date, e.access_date) as diff_days
+								from events16 e
+								join users16 u
+										on (e.user_id = u.user_id)),
+
+		music_prime_finding as (
+							Select user_id,
+										Sum(Case when type = 'Music' then 1 else 0 end) as music_accessed,
+										Sum(Case when type = 'P' then 1 else 0 end) as prime_upgrade
+							from event_details
+							where diff_days <=30
+							Group by user_id)
+
+Select sum(music_accessed) as total_users,
+			sum(prime_upgrade) as prime_users,
+			Round((sum(prime_upgrade) *1.0 /sum(music_accessed)) * 100,2)  as primesubscriptionPercentage
+from music_prime_finding
+
+
+
+--11-Jan-2026---12---------------------Day 17- ----------------------------
+--Recommendation system based on - products pairs most commonly purchased together
+
+create table orders17
+						(
+						order_id int,
+						customer_id int,
+						product_id int,
+						);
+
+insert into orders17 VALUES 
+(1, 1, 1),
+(1, 1, 2),
+(1, 1, 3),
+(2, 2, 1),
+(2, 2, 2),
+(2, 2, 4),
+(3, 1, 5);
+
+create table products17 (
+						id int,
+						name varchar(10));
+
+insert into products17 VALUES 
+(1, 'A'),
+(2, 'B'),
+(3, 'C'),
+(4, 'D'),
+(5, 'E');
+
+Select * from orders17
+Select * from products17;
+
+----------------------------My Solution----------------------------------------
+
+with productDetails as (
+						Select o.*, p.name 
+						from orders17 o 
+						left join products17 p
+								on (o.product_id = p.id))
+
+Select concat(a.name, ' ', b.name) as pair, count(*) as purchase_freq
+from productDetails a, productDetails b
+where a.order_id = b.order_id and a.name < b.name
+Group by concat(a.name, ' ', b.name);
+
+----------------------------------Ankit Bansal's Solution
+Select * from orders17
+Select * from products17;
+
+With product_table17 as (
+				Select a.product_id as p1, b.product_id as p2
+				from orders17 a, orders17 b
+				where a.order_id = b.order_id and a.product_id < b.product_id
+				)
+
+select pr1.name + ' ' + pr2.name as pairs, count(*) as purchase_freq
+from product_table17 pt
+join products17 pr1 on (pt.p1 = pr1.id)
+join products17 pr2 on (pt.p2 = pr2.id)
+Group by pr1.name + ' ' + pr2.name
+
+
+--11-Jan-2026---13---------------------Day 18-----------------------------
+--Customer Retention and customer churn metrices
+
+--Customer retention defenition
+/* Customer retention refers to a company's ability to turn customer into repeat buyers
+and prevent them from switching to a competitor.
+It indicates whether your product and the quality of your service please your existing customer
+Reward program (cc companies)
+Wallet cash back (paytm/gpay)
+zomato pro / swiggy super
+
+retention period*/
+
+
+create table transactions(
+						order_id int,
+						cust_id int,
+						order_date date,
+						amount int
+						);
+delete from transactions;
+insert into transactions values 
+(1,1,'2020-01-15',150)
+,(2,1,'2020-02-10',150)
+,(3,2,'2020-01-16',150)
+,(4,2,'2020-02-25',150)
+,(5,3,'2020-01-10',150)
+,(6,3,'2020-02-20',150)
+,(7,4,'2020-01-20',150)
+,(8,5,'2020-02-20',150);
+
+
+Select * from transactions;
+
+Select  MONTH(t1.order_date) as month_date, Count(distinct t2.cust_id) as total_retained_Cust
+from transactions t1
+left Join transactions t2
+on t1.cust_id = t2.cust_id and Datediff(month, t2.order_date, t1.order_date) = 1
+Group by MONTH(t1.order_date)
+
+--12-Jan-2026---14---------------------Day 19-----------------------------
+--Customer churn metrices
+Select * from transactions;
+
+Select  1+MONTH(last_month.order_date) as month_date, Count(distinct last_month.cust_id) as total_Churn
+from transactions last_month
+left Join transactions this_month
+on last_month.cust_id = this_month.cust_id and Datediff(month, last_month.order_date, this_month.order_date) = 1
+where this_month.cust_id is Null
+Group by MONTH(last_month.order_date);
+
+
+--18-Jan-2026---15---------------------Day 20-----------------------------
+--Get the second most activity, if there is only one activity then return the first one
+
+Create table UserActivity(
+						username      varchar(20) ,
+						activity      varchar(20),
+						startDate     Date   ,
+						endDate      Date
+						);
+
+insert into UserActivity values 
+('Alice','Travel','2020-02-12','2020-02-20')
+,('Alice','Dancing','2020-02-21','2020-02-23')
+,('Alice','Travel','2020-02-24','2020-02-28')
+,('Bob','Travel','2020-02-11','2020-02-18');
+
+With uniqueCount as (Select username, count(username) as userCount 
+										from UserActivity
+										Group by username),
+		userActivityCTE as (
+							Select ua.*, 
+							ROW_NUMBER() over (Partition by ua.username order by ua.startDate) as rnk,
+							uc.userCount
+							from UserActivity ua
+							Join uniqueCount uc
+							on (ua.username = uc.username))
+		
+Select *
+from userActivityCTE
+where userCount <2 or rnk=2
+
+
+------Ankit Bansal's Solution-----------------------------
+Select * from userActivity;
+
+With UA_Cte as (
+							Select *,
+									Count(1) over (Partition by username) as cnt,
+									ROW_NUMBER() over (Partition by username order by startDate) as rnk
+							from UserActivity)
+
+Select username,  activity, startDate, endDate
+from UA_Cte
+where cnt = 1 or rnk =2
+
+
+
+--18-Jan-2026---15---------------------Day 21-----------------------------
+--Get the second most activity, if there is only one activity then return the first one
+
+create table billings 
+				(
+				emp_name varchar(10),
+				bill_date date,
+				bill_rate int
+				);
+delete from billings;
+insert into billings values
+('Sachin','01-JAN-1990',25)
+,('Sehwag' ,'01-JAN-1989', 15)
+,('Dhoni' ,'01-JAN-1989', 20)
+,('Sachin' ,'05-Feb-1991', 30)
+;
+
+create table HoursWorked 
+							(
+							emp_name varchar(20),
+							work_date date,
+							bill_hrs int
+							);
+insert into HoursWorked values
+('Sachin', '01-JUL-1990' ,3)
+,('Sachin', '01-AUG-1990', 5)
+,('Sehwag','01-JUL-1990', 2)
+,('Sachin','01-JUL-1991', 4);
+
+
+-----------------------My Try with Failure-------------------------------
+Select * from billings
+Select * from HoursWorked
+
+Select hw.*, b.* 
+from HoursWorked hw
+left Join billings b
+on (b.emp_name = hw.emp_name and Cast(hw.work_date as date) > cast(b.bill_date as date))
+where b.emp_name = 'Sachin'
+
+-----------------------Ankit Bansal Solution-------------------------------
+
+with billingCTE as (
+					Select *, LEAD(Dateadd(day, -1, bill_date), 1, '9999-12-31') over (Partition by emp_name order by bill_date asc) as bill_end_date
+					from billings)
+
+Select hw.emp_name, Sum(hw.bill_hrs * b.bill_rate) as total_billing
+from HoursWorked hw
+left Join billingCTE b
+on (b.emp_name = hw.emp_name and hw.work_date between b.bill_date and b.bill_end_date)
+Group by hw.emp_name
+
+
+--19-Jan-2026---15---------------------Day 22-----------------------------
+--The activity table shows the app-installed and app purchase activities for spotify app along with country details
+
+CREATE table activity22
+				(
+				user_id varchar(20),
+				event_name varchar(20),
+				event_date date,
+				country varchar(20)
+				);
+delete from activity22;
+insert into activity22 values (1,'app-installed','2022-01-01','India')
+,(1,'app-purchase','2022-01-02','India')
+,(2,'app-installed','2022-01-01','USA')
+,(3,'app-installed','2022-01-01','USA')
+,(3,'app-purchase','2022-01-03','USA')
+,(4,'app-installed','2022-01-03','India')
+,(4,'app-purchase','2022-01-03','India')
+,(5,'app-installed','2022-01-03','SL')
+,(5,'app-purchase','2022-01-03','SL')
+,(6,'app-installed','2022-01-04','Pakistan')
+,(6,'app-purchase','2022-01-04','Pakistan');
+
+Select * from activity22;
+
+--Q1 Find Active users each day
+Select event_date, count(distinct user_id) as total_active_users
+from activity22
+Group by event_date
+
+--Q2 Find Active users each day
+Select DATEPART(week,event_date) as Week, count(distinct user_id) as total_active_users
+from activity22
+Group by DATEPART(week,event_date)
+
+--Q3  Date wise total number of users who made the purchase same day they installed the app
+Select * from activity22;
+
+with initialCTE as (
+		Select a1.event_date, count(1) as no_of_users_same_day_purchase
+		from activity22 a1
+		left join activity22 a2
+				on (a1.user_id= a2.user_id and a1.event_date= a2.event_date)
+		where a1.event_name = 'app-installed' and a2.event_name= 'app-purchase'
+		Group by a1.event_date)
+
+
+
+Select a3.event_date, COALESCE (ic.no_of_users_same_day_purchase,0) as no_of_users_same_day_purchase
+from activity22 a3
+left Join initialCTE ic
+		on (a3.event_date = ic.event_date)
+Group by a3.event_date, ic.no_of_users_same_day_purchase
+
+-- Ankit Bansals' Solution
+Select * from activity22;
+
+Select event_date, count(new_user) as user_purchase_same_day from (
+					Select event_date, user_id,
+								case when Count(distinct event_name) = 2 then user_id else Null end as new_user 
+					from activity22
+					Group by event_date, user_id) as ua
+Group by event_date
+
+
+--Q4  Percentage of paid users in india, USA and any other country should be tagged as others.
+
+
+Select count(*) from activity22
+where event_name = 'app-purchase'
+
+Select case when country in ('India', 'USA') then country else 'others' end as country_n,
+			100.0 * count(distinct user_id)/(Select count(*) from activity22
+																where event_name = 'app-purchase') as paid_user_count
+from activity22
+where event_name = 'app-purchase'
+Group by case when country in ('India', 'USA') then country else 'others' end
+Order by case when country in ('India', 'USA') then country else 'others' end ASC
+
+---------------------------Ankit's Solution-----------------------------------
+
+With country_users as (
+									Select case when country in ('India', 'USA') then country else 'others' end as new_country,
+												count(distinct user_id) as  user_cnt
+									from activity22
+									where event_name = 'app-purchase'
+									Group by case when country in ('India', 'USA') then country else 'others' end),
+		total_user as (
+									Select count(*) as total_users from activity22
+									where event_name = 'app-purchase')
+
+Select *, 100 * cu.user_cnt/tu.total_users as percentage_users
+from country_users cu, total_user tu
+order by cu.new_country
+
+--Q5  Among all the users who installed the app on a given day, how many did in app purchased on the very next day
+--	day wise result
+
+with user_activity as (
+					Select *,
+							LAG(event_name, 1) over (Partition by user_id order by event_date ) as previous_event_name,
+							LAG(event_date, 1) over (Partition by user_id order by event_date ) as previous_event_date
+					from activity22)
+
+Select event_date, count(distinct user_id) as total_user_who_purchase_the_very_next_day
+from user_activity
+where datediff(day, previous_event_date, event_date) =1
+and event_name = 'app-purchase'
+and previous_event_name = 'app-installed'
+Group by event_date
+
+--20-Jan-2026---16---------------------Day 23 -  Consecutive empty sheets-----------------------------
+--Get the second most activity, if there is only one activity then return the first one
+
+create table bms (seat_no int ,is_empty varchar(10));
+insert into bms values
+(1,'N')
+,(2,'Y')
+,(3,'N')
+,(4,'Y')
+,(5,'Y')
+,(6,'Y')
+,(7,'N')
+,(8,'Y')
+,(9,'Y')
+,(10,'Y')
+,(11,'Y')
+,(12,'N')
+,(13,'Y')
+,(14,'Y');
+
+Select * from (
+					Select *,
+							LAG(is_empty, 1) over (order by seat_no) as prev_1,
+							LAG(is_empty, 2) over (order by seat_no) as prev_2,
+							LEAD(is_empty, 1) over (order by seat_no) as next_1,
+							LEAD(is_empty, 2) over (order by seat_no) as next_2
+					from bms) as A
+where is_empty = 'Y' and prev_1 = 'Y' and prev_2 = 'Y'
+	    or (is_empty = 'Y' and prev_1 = 'Y' and next_1 = 'Y')
+	    or (is_empty = 'Y' and next_1 = 'Y' and next_2 = 'Y')
 
 
 
