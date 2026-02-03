@@ -472,7 +472,7 @@ insert into empDept values
 								(9, 'Mukesh',300,6000,6,51),
 								(10, 'Rakesh',300,7000,6,50);
 
-Select * from empDept
+Select * from empDept;
 
 -- method #1 -- median using ROW_NUMBER
 With CTEempDept as (
@@ -1114,7 +1114,7 @@ and previous_event_name = 'app-installed'
 Group by event_date
 
 --20-Jan-2026---16---------------------Day 23 -  Consecutive empty sheets-----------------------------
---Get the second most activity, if there is only one activity then return the first one
+--Get the consecutive empty sheets
 
 create table bms (seat_no int ,is_empty varchar(10));
 insert into bms values
@@ -1144,8 +1144,923 @@ where is_empty = 'Y' and prev_1 = 'Y' and prev_2 = 'Y'
 	    or (is_empty = 'Y' and prev_1 = 'Y' and next_1 = 'Y')
 	    or (is_empty = 'Y' and next_1 = 'Y' and next_2 = 'Y')
 
+---------------------------------Approach 2
+
+Select * from (
+				Select *,
+							SUM(case when is_empty='Y' then 1 else 0 end) over (order by seat_no rows between 2 preceding and current row) as prev_2,
+							SUM(case when is_empty='Y' then 1 else 0 end) over (order by seat_no rows between 1 preceding and 1 following) as cur_row,
+							SUM(case when is_empty='Y' then 1 else 0 end) over (order by seat_no rows between current row and 2 following) as next_2
+				from bms) as A
+Where prev_2 = 3 or cur_row = 3 or next_2 = 3
+
+
+--21-Jan-2026---17---------------------Day 24 -  Missing Quarter with 3 methods-----------------------------
+CREATE TABLE STORES (
+			Store varchar(10),
+			Quarter varchar(10),
+			Amount int);
+
+INSERT INTO STORES (Store, Quarter, Amount)
+			VALUES ('S1', 'Q1', 200),
+			('S1', 'Q2', 300),
+			('S1', 'Q4', 400),
+			('S2', 'Q1', 500),
+			('S2', 'Q3', 600),
+			('S2', 'Q4', 700),
+			('S3', 'Q1', 800),
+			('S3', 'Q2', 750),
+			('S3', 'Q3', 900);
+
+Select * from STORES;
+
+
+-- My Solution try to find the missing quarters
+with storename as (Select distinct Quarter from STORES),
+		quatername as (Select distinct store from STORES),
+		helpertable as (select * from quatername, storename)
+
+Select ht.Store, ht.Quarter, s.Amount from helpertable ht
+left Join STORES s
+		on (ht.Store=s.Store and ht.Quarter= s.Quarter)
+where s.Amount is Null
+
+
+---Ankit Bansals approach - 1st solution
+Select * from STORES
+
+Select Store, 'Q' + Cast(10 - SUM(Cast(RIGHT(Quarter, 1) as int)) as varchar) as missing_qtr
+from STORES
+Group by Store
+
+---Ankit Bansals approach - 2nd solution -- using recursive CTE----------------------------
+Select * from STORES;
+
+with rCTE as (
+									Select distinct Store, 1 as q_num from STORES
+									Union All
+									Select store, 1+q_num  as q_num from rCTE
+									where q_num <4),
+		dummyTable as (Select store, 'Q' + cast(q_num as varchar)  as qtr from rCTE)
+
+Select ht.Store, ht.qtr, s.Amount from dummyTable ht
+left Join STORES s
+		on (ht.Store=s.Store and ht.qtr= s.Quarter)
+where s.Amount is Null;
+
+---Ankit Bansals approach - 3rd solution -- using Cross Join----------------------------
+with storename as (Select distinct s1.Store, s2.Quarter
+									from STORES s1, STORES s2)
+
+Select ht.Store, ht.Quarter as q_no from storename ht
+left Join STORES s
+		on (ht.Store=s.Store and ht.Quarter= s.Quarter)
+where s.Amount is Null
+
+
+--22-Jan-2026---17---------------------Day 27 -  Google SQL Interview Question-----------------------------
+-- Find companies who have atleast 2 users who speaks English and German both the language
+
+create table company_users 
+			(company_id int,
+			user_id int,
+			language varchar(20));
+
+insert into company_users values (1,1,'English')
+		,(1,1,'German')
+		,(1,2,'English')
+		,(1,3,'German')
+		,(1,3,'English')
+		,(1,4,'English')
+		,(2,5,'English')
+		,(2,5,'German')
+		,(2,5,'Spanish')
+		,(2,6,'German')
+		,(2,6,'Spanish')
+		,(2,7,'English');
+
+-- My Solution----------------
+with user_idCTE as (
+		Select user_id
+		from company_users
+		where language in ('English', 'German')
+		Group by user_id
+		having count(distinct language) = 2)
+
+Select company_id 
+from company_users 
+where user_id in (Select * from user_idCTE)
+Group by company_id
+Having count(distinct user_id) = 2
+
+-- Ankit Bansal's Solution----------------
+Select company_id from (
+					Select distinct company_id, user_id, count(1) as cnt
+					from company_users
+					where language in ('English', 'German')
+					Group by company_id, user_id
+					having count(1)  = 2) as a 
+Group by company_id
+having count(distinct user_id) >= 2
+
+--22-Jan-2026---17---------------------Day 28 -  Meesho HackerRank SQL Test-----------------------------
+-- Find how many product falls into customer budget along with list of products
+-- In case of clash chose the less costly product
+
+create table products28 (product_id varchar(20) , cost int);
+insert into products28 values ('P1',200),('P2',300),('P3',500),('P4',800);
+
+create table customer_budget28 (customer_id int, budget int);
+insert into customer_budget28 values (100,400),(200,800),(300,1500);
+
+Select * from products28;
+Select * from customer_budget28;
+
+-- My Solution---------------------------------
+with analysisCTE as(
+			Select *,
+					SUM(cost) over (Partition by customer_id  order by budget, cost) as rolling_cost,
+					case when (SUM(cost) over (Partition by customer_id  order by budget, cost)  < budget) then 'Y' else 'N' end as in_budget
+			from customer_budget28 cb, products28 p)
+
+Select customer_id, budget, count(1) as no_products, STRING_AGG(product_id, ', ') as list_of_products
+from analysisCTE
+Where in_budget = 'Y'
+Group by customer_id, budget
+order by customer_id
+
+-- Ankits Solution---------------------------------
+With productCTE as (
+				Select *,
+							sum(cost) over (order by cost) as rc
+				from products28)
+
+Select cb.customer_id, cb.budget, count(1) as no_products, STRING_AGG(pc.product_id, ', ') as list_of_products
+from customer_budget28 cb
+Left Join productCTE pc
+		on (cb.budget > pc.rc)
+Group by cb.customer_id, cb.budget
+
+
+--23-Jan-2026------------------------Day 29 -  Horizontal Sorting in SQL-----------------------------
+--Amazon SQL Interview Question for BIE position
+--Find total no. of message exchanged between each person per day
+
+CREATE TABLE subscriber (
+					 sms_date date ,
+					 sender varchar(20) ,
+					 receiver varchar(20) ,
+					 sms_no int
+					);
+-- insert some values
+INSERT INTO subscriber VALUES ('2020-4-1', 'Avinash', 'Vibhor',10);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Vibhor', 'Avinash',20);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Avinash', 'Pawan',30);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Pawan', 'Avinash',20);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Vibhor', 'Pawan',5);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Pawan', 'Vibhor',8);
+INSERT INTO subscriber VALUES ('2020-4-1', 'Vibhor', 'Deepak',50);
+
+Select * from subscriber;
+
+-- Total message recieved or sent by each person
+with exchangerCTE as (
+				Select sms_date, sender as exchanger, sms_no from subscriber
+				Union All
+				Select sms_date, receiver as exchanger, sms_no from subscriber)
+
+Select sms_date, exchanger, sum(sms_no) as total_messges
+from exchangerCTE
+Group by sms_date, exchanger
+order by sms_date, exchanger;
+
+--Ankit's Solution-----------------------------
+
+Select sms_date, p1, p2, sum(sms_no) as total_sms from (
+Select *,
+			Case when sender<receiver then sender else receiver end as p1,
+			Case when sender>receiver then sender else receiver end as p2
+from subscriber) as a
+Group by sms_date, p1, p2
+
+--23-Jan-2026------------------------Day 30 -  Tricky SQL Problems-----------------------------
+--SQL set with 4 medium to high complexity problems
+
+CREATE TABLE Students30(
+		 [studentid] [int] NULL,
+		 [studentname] [nvarchar](255) NULL,
+		 [subject] [nvarchar](255) NULL,
+		 [marks] [int] NULL,
+		 [testid] [int] NULL,
+		 [testdate] [date] NULL
+		)
+
+insert into Students30 values (2,'Max Ruin','Subject1',63,1,'2022-01-02');
+insert into Students30 values (3,'Arnold','Subject1',95,1,'2022-01-02');
+insert into Students30 values (4,'Krish Star','Subject1',61,1,'2022-01-02');
+insert into Students30 values (5,'John Mike','Subject1',91,1,'2022-01-02');
+insert into Students30 values (4,'Krish Star','Subject2',71,1,'2022-01-02');
+insert into Students30 values (3,'Arnold','Subject2',32,1,'2022-01-02');
+insert into Students30 values (5,'John Mike','Subject2',61,2,'2022-11-02');
+insert into Students30 values (1,'John Deo','Subject2',60,1,'2022-01-02');
+insert into Students30 values (2,'Max Ruin','Subject2',84,1,'2022-01-02');
+insert into Students30 values (2,'Max Ruin','Subject3',29,3,'2022-01-03');
+insert into Students30 values (5,'John Mike','Subject3',98,2,'2022-11-02');
+
+Select * from Students30;
+
+--Q1 -- Write a SQL query to get the list of students who scored above the subject in each subject;
+
+with subject_average as (
+			Select subject, AVG(marks) avg_marks 
+			from Students30
+			Group by subject)
+
+Select * 
+from Students30 s
+Left join subject_average sa
+		on (s.subject = sa.subject)
+where s.marks > sa.avg_marks;
+
+--Q2 -- Write a SQL query to get the percentage of students who scored more than 90 in any subject amongest the total student;
+
+--My Solution-----
+DECLARE @TotalStudent INT
+DECLARE @StudentWithAbove90 INT
+Set @TotalStudent = (Select count(distinct a.studentid) total_student from Students30 as a)
+Set @StudentWithAbove90 = (
+													Select count(distinct b.studentid) total_student from Students30 b
+													where b.marks > 90)
+
+Select 100.0 * @StudentWithAbove90 / @TotalStudent as PercentageStudentWithAbove90
+
+--Ankit's Solution
+
+Select Count(distinct case when b.marks > 90 then studentid else Null end) as with90,
+			Count(distinct b.studentid) as totalStudent,
+			Count(distinct case when b.marks > 90 then studentid else Null end)  * 100.0 / Count(distinct b.studentid)  as percentage
+from Students30 b
+
+--Q3 -- Write a SQL query to get the second highest and second-lowest marks for each subject
+--My Solution
+Select Subject, max(shm) as second_highest_marks, max(slm)  as second_lowest_marks from (
+		Select *,
+					Case when ROW_NUMBER() over (Partition by subject order by marks DESC) = 2 then marks else Null end as shm,
+					Case when ROW_NUMBER() over (Partition by subject order by marks ASC) =2 then marks else Null end  as slm
+		from Students30 s) as a
+Group by Subject
+
+
+--Q4 -- For each student and test, identify if their marks increased or decreased from the previous test
+Select *,
+			LAG(marks, 1) over (Partition by studentid order by subject) as prev_marks,
+			case when marks - LAG(marks, 1) over (Partition by studentid order by subject) > 0 then 'inc'
+					 when LAG(marks, 1) over (Partition by studentid order by subject) is Null then Null else 'dec' end  as Status
+from Students30
+order by studentid
+
+
+--24-Jan-2026------------------------Day 31 -  Brilliant SQL Interview Question-----------------------------
+
+CREATE TABLE [dbo].[int_orders](
+						 [order_number] [int] NOT NULL,
+						 [order_date] [date] NOT NULL,
+						 [cust_id] [int] NOT NULL,
+						 [salesperson_id] [int] NOT NULL,
+						 [amount] [float] NOT NULL
+						) ON [PRIMARY];
+
+INSERT INTO [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (30, CAST('1995-07-14' AS Date), 9, 1, 460);
+INSERT into [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (10, CAST('1996-08-02' AS Date), 4, 2, 540);
+INSERT INTO [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (40, CAST('1998-01-29' AS Date), 7, 2, 2400);
+INSERT INTO [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (50, CAST('1998-02-03' AS Date), 6, 7, 600);
+INSERT into [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (60, CAST('1998-03-02' AS Date), 6, 7, 720);
+INSERT into [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (70, CAST('1998-05-06' AS Date), 9, 7, 150);
+INSERT into [dbo].[int_orders] ([order_number], [order_date], [cust_id], [salesperson_id], [amount]) VALUES (20, CAST('1999-01-30' AS Date), 4, 8, 1800);
+
+
+Select * from int_orders;
+--Find the largest order by value for each salesperson and display order details.
+--Get the result without using sub query, CTE, window functions, temp tables
+
+Select a.order_number, a.order_date, a.salesperson_id, a.amount
+from int_orders a
+left Join int_orders b
+		on (a.salesperson_id = b.salesperson_id)
+Group by a.order_number, a.order_date, a.salesperson_id, a.amount
+having a.amount>=max(b.amount)
+order by a.salesperson_id asc, a.amount desc
+
+
+--24-Jan-2026------------------------Day 32 -  SQL On Off Problem-----------------------------
+create table event_status
+	(event_time varchar(10),
+	status varchar(10));
+
+insert into event_status values
+('10:01','on'),('10:02','on'),('10:03','on'),('10:04','off'),('10:07','on'),('10:08','on'),('10:09','off')
+,('10:11','on'),('10:12','off');
+
+Select * from event_status
+
+--My Try ---Failed
+Select *,
+		case when status = 'on' then event_time else Null end as login,
+		LEAD(case when status = 'off' then event_time else Null end, 1) over (order by event_time)as logout
+from event_status;
+
+--Ankit Bansal's Solution----------------------------
+With statusCTE as (
+					Select *,
+							Sum(case when status = 'on' and prev_status='off' then 1 else 0 end) over (order by event_time) as group_key
+					from (
+							Select *, LAG(status, 1, status) over (order by event_time) as prev_status
+							from event_status) as A)
+
+Select min(event_time) as login, max(event_time) as logout, count(1)-1 as cnt 
+from statusCTE
+Group by group_key
+
+
+--25-Jan-2026------------------------Day 33 -  Leetcode - Players/Students Reports-----------------------------
+
+create table players_location
+		(name varchar(20),
+		city varchar(20));
+
+delete from players_location;
+insert into players_location
+values ('Sachin','Mumbai'),('Virat','Delhi') , ('Rahul','Bangalore'),('Rohit','Mumbai'),('Mayank','Bangalore');
+
+
+Select * from players_location;
+
+--My try with failure-----------------
+with pl as (
+		Select *,
+				case when city = 'Bangalore' then name else 'z' end as 'Bangalore',
+				case when city = 'Delhi' then name else 'z' end as 'Delhi',
+				case when city = 'Mumbai' then name else 'z' end as 'Mumbai'
+		from players_location)
+
+Select distinct Bangalore, Delhi, Mumbai
+from pl
+order by Bangalore, Delhi, Mumbai
+
+
+--Ankit Bansals' Solution-----------------
+
+Select rn,
+		MAX(case when city = 'Bangalore' then name else Null end) as 'Bangalore',
+		MAX(case when city = 'Delhi' then name else Null end) as 'Delhi',
+		MAX(case when city = 'Mumbai' then name else Null end) as 'Mumbai'
+from (
+			Select *,
+				ROW_NUMBER() over (Partition by city order by name asc) as rn
+			from players_location) as pl
+Group by rn
+
+--26-Jan-2026------------------------Day 34 -  Employee Median Salary-----------------------------
+
+create table employee34
+		(emp_id int,
+		company varchar(10),
+		salary int);
+
+insert into employee34 values (1,'A',2341)
+insert into employee34 values (2,'A',341)
+insert into employee34 values (3,'A',15)
+insert into employee34 values (4,'A',15314)
+insert into employee34 values (5,'A',451)
+insert into employee34 values (6,'A',513)
+insert into employee34 values (7,'B',15)
+insert into employee34 values (8,'B',13)
+insert into employee34 values (9,'B',1154)
+insert into employee34 values (10,'B',1345)
+insert into employee34 values (11,'B',1221)
+insert into employee34 values (12,'B',234)
+insert into employee34 values (13,'C',2345)
+insert into employee34 values (14,'C',2645)
+insert into employee34 values (15,'C',2645)
+insert into employee34 values (16,'C',2652)
+insert into employee34 values (17,'C',65);
+
+Select * from employee34;
+
+--Write a SQL query to find the median salary of each company
+--Bonus point if you can solve it without using built-in SQL functions.
+
+with salary_rn as (
+		Select *,
+			ROW_NUMBER() over (Partition by company order by salary asc) as rn1,
+			ROW_NUMBER() over (Partition by company order by salary desc) as rn2
+		from employee34)
+
+Select company, AVG(salary) as median
+from salary_rn
+where ABS(rn1-rn2) <=1
+Group by company
+
+-- method #2 -- median using percentile_cont
+Select distinct company,
+		PERCENTILE_CONT(0.5) within group (order by salary) over (Partition by company) as median_salary
+from employee34
 
 
 
+--26-Jan-2026------------------------Day 35 -  Amazon SQL interview quetion-----------------------------
+
+CREATE TABLE [emp35](
+	 [emp_id] [int] NULL,
+	 [emp_name] [varchar](50) NULL,
+	 [salary] [int] NULL,
+	 [manager_id] [int] NULL,
+	 [emp_age] [int] NULL,
+	 [dep_id] [int] NULL,
+	 [dep_name] [varchar](20) NULL,
+	 [gender] [varchar](10) NULL
+	) ;
+
+insert into emp35 values(1,'Ankit',14300,4,39,100,'Analytics','Female')
+insert into emp35 values(2,'Mohit',14000,5,48,200,'IT','Male')
+insert into emp35 values(3,'Vikas',12100,4,37,100,'Analytics','Female')
+insert into emp35 values(4,'Rohit',7260,2,16,100,'Analytics','Female')
+insert into emp35 values(5,'Mudit',15000,6,55,200,'IT','Male')
+insert into emp35 values(6,'Agam',15600,2,14,200,'IT','Male')
+insert into emp35 values(7,'Sanjay',12000,2,13,200,'IT','Male')
+insert into emp35 values(8,'Ashish',7200,2,12,200,'IT','Male')
+insert into emp35 values(9,'Mukesh',7000,6,51,300,'HR','Male')
+insert into emp35 values(10,'Rakesh',8000,6,50,300,'HR','Male')
+insert into emp35 values(11,'Akhil',4000,1,31,500,'Ops','Male');
+
+Select * from emp35;
+
+--Write a sql to find details of employees with 3rd highest salary in each department
+--in case there are less than 3 employees in a department than return employee details with lowest salary in that department
+
+with employee_details as (
+									Select *,
+											ROW_NUMBER() over (Partition by dep_id order by salary desc) as rn1
+									from emp35),
+		prior_query as (Select *,
+											ROW_NUMBER() over (Partition by dep_id order by rn1 desc) as rn2
+									from employee_details
+									where rn1<=3)
+
+Select * from prior_query
+Where rn2 = 1;
 
 
+--27-Jan-2026------------------------Day 36 -  Human Traffic of stadium-----------------------------
+
+create table stadium (
+		id int,
+		visit_date date,
+		no_of_people int);
+
+insert into stadium
+values (1,'2017-07-01',10)
+,(2,'2017-07-02',109)
+,(3,'2017-07-03',150)
+,(4,'2017-07-04',99)
+,(5,'2017-07-05',145)
+,(6,'2017-07-06',1455)
+,(7,'2017-07-07',199)
+,(8,'2017-07-08',188);
+
+--Write a query to display the records which have 3 or more consecutive rows
+--with the amount of people more than 100(inclusive) each day
+
+With stadium_group as (
+		Select *,
+				ROW_NUMBER() over (order by visit_date) as rw_no,
+				Datepart(day, visit_date) as prev_date_no,
+				Datepart(day, visit_date) - ROW_NUMBER() over (order by visit_date) as grp
+		from stadium
+		where no_of_people > 100)
+
+Select * 
+from stadium_group 
+where grp in (Select grp from stadium_group group by grp having count(*) >= 3)
+
+
+
+--28-Jan-2026------------------------Day 37 - Udaan Power of self Join  -----------------------------
+--Business_city table has data from the day udaan has started operation
+--write a sql to identify yearwise count of new cities where udaan started their operation
+
+create table business_city (
+		business_date date,
+		city_id int
+		);
+delete from business_city;
+insert into business_city
+values(cast('2020-01-02' as date),3),(cast('2020-07-01' as date),7),(cast('2021-01-01' as date),3),(cast('2021-02-03' as date),19)
+,(cast('2022-12-01' as date),3),(cast('2022-12-15' as date),3),(cast('2022-02-28' as date),12);
+
+Select * from business_city
+order by business_date
+
+-- My solution using window function and sub-query
+Select YEAR(business_date) as year, count(*) as #_new_cities
+from (
+		Select *,
+				ROW_NUMBER() over (partition by city_id order by business_date) as rn
+		from business_city) as a
+where rn = 1
+group by YEAR(business_date);
+
+-- Ankit Bansal's solution using CTE and self join
+With yearwiseCTE as (
+		Select DATEPART(year, business_date) as year, city_id from business_city)
+
+Select a.year, count(a.city_id) as #_of_new_cities
+from yearwiseCTE a
+left join yearwiseCTE b
+		on (a.year> b.year and a.city_id=b.city_id)
+where b.year is Null
+Group by a.year;
+
+
+-- Ankit Bansal's solution using CTE and self join and case when
+With yearwiseCTE as (
+		Select DATEPART(year, business_date) as year, city_id from business_city)
+
+Select a.year, count( distinct case when b.city_id is Null then a.city_id end) as #_of_new_cities
+from yearwiseCTE a
+left join yearwiseCTE b
+		on (a.year> b.year and a.city_id=b.city_id)
+Group by a.year
+
+--29-Jan-2026------------------------Day 38 - Pharmeasy SQL interview Question  -----------------------------
+--There are 3 rows in a movie hall each with 10 seats in each row
+--Write a SQL to find 4 consecutive empty seats
+
+create table movie(
+seat varchar(50),occupancy int
+);
+insert into movie values('a1',1),('a2',1),('a3',0),('a4',0),('a5',0),('a6',0),('a7',1),('a8',1),('a9',0),('a10',0),
+('b1',0),('b2',0),('b3',0),('b4',1),('b5',1),('b6',1),('b7',1),('b8',0),('b9',0),('b10',0),
+('c1',0),('c2',1),('c3',0),('c4',1),('c5',1),('c6',0),('c7',1),('c8',0),('c9',0),('c10',1);
+Select * from movie;
+
+--My solution
+with cteMovietable as (
+			Select *, left(seat,1) as seat_rw, cast(replace(seat, left(seat,1), '') as int) as seat_no
+			from movie)
+
+Select seat, occupancy from (
+	Select *,
+		SUM(case when occupancy = 0 then 1 else 0 end) over (Partition by seat_rw order by seat_no rows between 3 preceding and current row) as prev_3,
+		SUM(case when occupancy = 0 then 1 else 0 end) over (Partition by seat_rw order by seat_no rows between 2 preceding and 1 following) as p2n1,
+		SUM(case when occupancy = 0 then 1 else 0 end) over (Partition by seat_rw order by seat_no rows between 1 preceding and 2 following) as p1n2,
+		SUM(case when occupancy = 0 then 1 else 0 end) over (Partition by seat_rw order by seat_no rows between current row and 3 following) as next_3
+	from cteMovietable) as A
+where prev_3 = 4 or p2n1 = 4 or p1n2 = 4 or next_3=4;
+
+--Ankit Bansal's Solution
+
+with cteMovietable as (
+						Select *, left(seat,1) as seat_rw, cast(replace(seat, left(seat,1), '') as int) as seat_no
+						from movie),
+			case1 as (
+						Select *,
+								max(occupancy) over (Partition by seat_rw order by seat_no rows between current row and 3 following) as mx,
+								count(occupancy) over (Partition by seat_rw order by seat_no rows between current row and 3 following) as cnt
+						from cteMovietable),
+			case2 as (Select * from case1 Where mx = 0 and cnt=4)
+
+Select a.* 
+from case1 a
+inner join case2 b
+		on (a.seat_rw = b.seat_rw) and (a.seat_no between b.seat_no and b.seat_no+3)
+
+
+
+--30 Jan-2026------------------------Day 39 - Bosch scenario based SQL interview Question  -----------------------------
+/*
+Write a SQL to determine phone numbers that satisfy below conditions:
+	1- The number have both incoming and outgoing calls
+	2- The number of duration of outgoing calls should be greater than sum of duration of incoming calls
+*/
+
+create table call_details  (
+	call_type varchar(10),
+	call_number varchar(12),
+	call_duration int
+	);
+
+insert into call_details
+values ('OUT','181868',13),('OUT','2159010',8)
+,('OUT','2159010',178),('SMS','4153810',1),('OUT','2159010',152),('OUT','9140152',18),('SMS','4162672',1)
+,('SMS','9168204',1),('OUT','9168204',576),('INC','2159010',5),('INC','2159010',4),('SMS','2159010',1)
+,('SMS','4535614',1),('OUT','181868',20),('INC','181868',54),('INC','218748',20),('INC','2159010',9)
+,('INC','197432',66),('SMS','2159010',1),('SMS','4535614',1);
+
+--My Solution
+Select * from (
+			Select call_number,
+				SUM(case when call_type = 'OUT' then call_duration else Null end) as outgoing,
+				SUM(case when call_type = 'INC' then call_duration else Null end) as incoming
+			from call_details
+			where call_type in ('OUT', 'INC')
+			Group by call_number) as A
+where outgoing is not null and  incoming is not null
+and outgoing > incoming;
+
+--Ankit Bansal Solution
+--With CTE and Filter clause
+with cte_calldetails as (
+					Select call_number,
+						SUM(case when call_type = 'OUT' then call_duration else Null end) as outgoing,
+						SUM(case when call_type = 'INC' then call_duration else Null end) as incoming
+					from call_details
+					where call_type in ('OUT', 'INC')
+					Group by call_number)
+
+Select * from cte_calldetails
+where outgoing is not null and  incoming is not null
+and outgoing > incoming;
+
+--Using having clause
+
+Select call_number,
+	SUM(case when call_type = 'OUT' then call_duration else Null end) as outgoing,
+	SUM(case when call_type = 'INC' then call_duration else Null end) as incoming
+from call_details
+where call_type in ('OUT', 'INC')
+Group by call_number
+Having SUM(case when call_type = 'OUT' then call_duration else Null end) > 
+			 SUM(case when call_type = 'INC' then call_duration else Null end);
+
+--Using CTE and Joins
+with call_out as (
+					Select call_number, sum(call_duration) as outgoing 
+					from call_details
+					where call_type='Out'
+					Group by call_number),
+		call_in as (
+					Select call_number, sum(call_duration) as incoming 
+					from call_details
+					where call_type='INC'
+					Group by call_number)
+Select co.call_number, co.outgoing as outgoing, ci.incoming
+from call_out co
+inner join call_in ci
+		on (co.call_number = ci.call_number and co.outgoing > ci.incoming)
+
+--31 Jan-2026------------------------Day 40 - Delloite SQL interview Question  -----------------------------
+/*
+Write a SQL to determine phone numbers that satisfy below conditions:
+	1- The number have both incoming and outgoing calls
+	2- The number of duration of outgoing calls should be greater than sum of duration of incoming calls
+*/
+
+
+create table brands 
+		(category varchar(20),
+		brand_name varchar(20));
+
+insert into brands values
+	('chocolates','5-star')
+	,(null,'dairy milk')
+	,(null,'perk')
+	,(null,'eclair')
+	,('Biscuits','britannia')
+	,(null,'good day')
+	,(null,'boost');
+
+	Select * from brands
+	
+
+	--My failed approach
+	Select *,
+		--case when category is null then lag(category, 1) over (order by brand_name) end as new_col,
+		coalesce(category, brand_name) as addicol
+	from brands;
+
+--Ankit Bansal's approach
+Select * from brands;
+
+with c1 as (
+				Select *,
+					ROW_NUMBER() over (order by (Select null)) as rn
+				from brands),
+		c2 as (
+				Select *,
+					LEAD(rn, 1) over (Partition by null order by rn) as rn2
+				from c1
+				where category is not null)
+
+Select c2.category, c1.brand_name 
+from c1
+left join c2 
+			on c1.rn >= c2.rn and (c1.rn <=c2.rn2 -1 or c2.rn2 is Null)
+
+--01 Feb-2026------------------------Day 41 - Find the quite student in all exams -----------------------------
+/*
+Write a SQL to report the students (student_id, student_name) being "quiet" in all exams.
+	1- A "quiet" student is the one who took at least one exam and didn't score neither the high score nor the low score in any of the exam.
+	2- Don't return the student who has never taken any exam. Return the result table ordered by student_id
+*/
+
+
+create table students41
+	(student_id int,
+	student_name varchar(20));
+
+insert into students41 values
+	(1,'Daniel'),(2,'Jade'),(3,'Stella'),(4,'Jonathan'),(5,'Will');
+
+create table exams41
+	(exam_id int,
+	student_id int,
+	score int);
+
+insert into exams41 values
+	(10,1,70),(10,2,80),(10,3,90),(20,1,80),(30,1,70),(30,3,80),(30,4,90),(40,1,60)
+	,(40,2,70),(40,4,80);
+
+--My Solution
+Select * from students41;
+Select * from exams41;
+
+With min_maxCTE as (
+		Select *,
+			Min(score) over (Partition by student_id order by student_id) as min_scoreStudent,
+			Max(score) over (Partition by student_id order by student_id) as max_scoreStudent,
+			Min(score) over (order by (Select Null)) as min_score,
+			Max(score) over (order by (Select Null)) as max_score
+		from exams41),
+	
+	uniquestudent as (
+		Select distinct student_id
+		from min_maxCTE
+		where min_scoreStudent > min_score and  max_scoreStudent < max_score)
+
+Select s.* 
+from students41 s
+Join uniquestudent e
+on (s.student_id = e.student_id);
+
+--Ankit Bansals solution
+
+with examCTE as (
+	Select exam_id,
+	MIN(score) as min_score, MAX(score) as max_score 
+	from exams41
+	Group by exam_id)
+
+Select student_id
+from exams41 e
+join examCTE ec
+		on (e.exam_id = ec.exam_id)
+Group by student_id
+having max(case when score = min_score or score = max_score then 1 else 0 end) = 0
+
+
+--02 Feb-2026------------------------Day 42 - Walmart Labs SQL Interview Question -----------------------------
+/*
+There is a phone log table that has information about callers call history
+Write a SQL to find out callers whose first and last call was to the same person on a given day.
+*/
+
+create table phonelog(
+    Callerid int, 
+    Recipientid int,
+    Datecalled datetime
+);
+
+insert into phonelog(Callerid, Recipientid, Datecalled)
+values(1, 2, '2019-01-01 09:00:00.000'),
+       (1, 3, '2019-01-01 17:00:00.000'),
+       (1, 4, '2019-01-01 23:00:00.000'),
+       (2, 5, '2019-07-05 09:00:00.000'),
+       (2, 3, '2019-07-05 17:00:00.000'),
+       (2, 3, '2019-07-05 17:20:00.000'),
+       (2, 5, '2019-07-05 23:00:00.000'),
+       (2, 3, '2019-08-01 09:00:00.000'),
+       (2, 3, '2019-08-01 17:00:00.000'),
+       (2, 5, '2019-08-01 19:30:00.000'),
+       (2, 4, '2019-08-02 09:00:00.000'),
+       (2, 5, '2019-08-02 10:00:00.000'),
+       (2, 5, '2019-08-02 10:45:00.000'),
+       (2, 4, '2019-08-02 11:00:00.000');
+
+Select * from phonelog;
+
+with callertable as (
+	Select Callerid, cast(Datecalled as date) as c_date, min(Datecalled) firstCall, max(DateCalled) lastCall
+	from phonelog
+	Group by Callerid, cast(Datecalled as date))
+
+Select ct.*, p1.Recipientid
+from callertable ct
+join phonelog p1 on p1.Callerid = ct.Callerid and ct.firstCall = p1.Datecalled
+join phonelog p2 on p2.Callerid = ct.Callerid and ct.lastCall = p2.Datecalled
+where p1.Recipientid = p2.Recipientid;
+
+
+--03 Feb-2026------------------------Day 43 - Microsoft SQL Interview Question -----------------------------
+/*
+A company wants to hire new employees, The budget of the company for the salaries is $70000. The company's criteria for hiring are:
+Keep hiring the senior with the smallest salary until you cannot hire any more seniors.
+Use the remaining budget to hire the junior with the smallest salary.
+Keep hiring the junior with the smallest salary until you cannot hire any more juniors.
+Write an SQL to find out the seniors and juniors hired under the mentioned criteria.
+*/
+
+create table candidates (
+		emp_id int,
+		experience varchar(20),
+		salary int);
+
+delete from candidates;
+insert into candidates values
+(1,'Junior',10000),(2,'Junior',15000),(3,'Junior',40000),(4,'Senior',16000),(5,'Senior',20000),(6,'Senior',50000);
+
+
+Select * from candidates;
+
+With candidateCTE as (
+		Select *,
+			Sum(salary) over (Partition by experience order by salary rows between unbounded preceding and current row) as running_sum
+		from candidates),
+	senior_hired as (
+		Select * from candidateCTE
+		Where experience = 'Senior' and  running_sum <=70000)
+
+Select * from candidateCTE
+		Where experience = 'Junior' and  running_sum <=70000 - (Select sum(salary) from senior_hired)
+Union all
+Select * from senior_hired;
+
+
+--03 Feb-2026------------------------Day 44 - Double Self Join in SQL -----------------------------
+/*
+Write a SQL to list emp name along with their manager name and senior Manager name
+--Senior manager is manager's manager
+*/
+
+create table emp44(
+	emp_id int,
+	emp_name varchar(20),
+	department_id int,
+	salary int,
+	manager_id int,
+	emp_age int);
+
+insert into emp44
+values (1, 'Ankit', 100,10000, 4, 39),
+			(2, 'Mohit', 100, 15000, 5, 48),
+			(3, 'Vikas', 100, 12000,4,37),
+			(4, 'Rohit', 100, 14000, 2, 16),
+			(5, 'Mudit', 200, 20000, 6,55),
+			(6, 'Agam', 200, 12000,2, 14),
+			(7, 'Sanjay', 200, 9000, 2,13),
+			(8, 'Ashish', 200,5000,2,12),
+			(9, 'Mukesh',300,6000,6,51),
+			(10, 'Rakesh',500,7000,6,50);
+
+Select * from emp44;
+
+Select e.emp_id, e.emp_name, m.emp_name, sm.emp_name
+from emp44 e
+join emp44 m on (e.manager_id = m.emp_id)
+join emp44 sm on (m.manager_id = sm.emp_id)
+
+
+--04 Feb-2026------------------------Day 45 - SQL Screening Test -----------------------------
+/*
+
+
+*/
+
+create table tbl_orders (
+	order_id integer,
+	order_date date
+	);
+insert into tbl_orders
+values (1,'2022-10-21'),(2,'2022-10-22'),
+(3,'2022-10-25'),(4,'2022-10-25');
+
+Select * from tbl_orders;
+
+select * into tbl_orders_copy from  tbl_orders;
+
+--select * from tbl_orders;
+insert into tbl_orders
+values (5,'2022-10-26'),(6,'2022-10-26');
+delete from tbl_orders where order_id=1;
+
+
+--04 Feb-2026------------------------Day 46 - Uber SQL Interview Problem -----------------------------
+/*
+	Write a query to print total rides and profit rides for each driver
+	Profit ride is when the end location is of the current ride is same as start location on next ride
+*/
+
+create table drivers(id varchar(10), start_time time, end_time time, start_loc varchar(10), end_loc varchar(10));
+insert into drivers values('dri_1', '09:00', '09:30', 'a','b'),('dri_1', '09:30', '10:30', 'b','c'),('dri_1','11:00','11:30', 'd','e');
+insert into drivers values('dri_1', '12:00', '12:30', 'f','g'),('dri_1', '13:30', '14:30', 'c','h');
+insert into drivers values('dri_2', '12:15', '12:30', 'f','g'),('dri_2', '13:30', '14:30', 'c','h');
